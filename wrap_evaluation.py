@@ -166,7 +166,7 @@ def _add_common_arguments(parser):
     # evaluation
     parser.add_argument("--downstream_eval", type=str, help="Whether to perform 'full'" \
                 "downstream evaluation (slow), 'test' downstream evaluation (fast).",
-                choices = ["test", "full"], required = True)
+                choices = ["test", "full"], required = False, default=None)
     parser.add_argument("--downstream_tasks", type=str, nargs = "+",
                         # default=['STSBenchmark'],
                         default=['CR', 'MR', 'MPQA', 'SUBJ', 'SST2', 'SST5', 'TREC', 'MRPC', 'SNLI',

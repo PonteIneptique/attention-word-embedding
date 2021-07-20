@@ -52,7 +52,10 @@ def run_experiment(params):
     dataset_path = params.dataset_path
 
     # build training and test corpus
-    filename_list = recursive_file_list(dataset_path)
+    if dataset_path.endswith(".txt"):
+        filename_list = [dataset_path]
+    else:
+        filename_list = recursive_file_list(dataset_path)
     print('Use the following files for training: ', filename_list)
     corpus = CBOWDataset(dataset_path, params.num_docs, params.context_size, 
                          params.num_samples_per_item, params.mode,
@@ -110,7 +113,7 @@ def run_experiment(params):
     # build cbow model
     cbow_net = CBOWNet(encoder, output_embedding_size, n_words, 
                        weights = unigram_dist, n_negs = params.n_negs, padding_idx = 0)
-    if torch.cuda.device_count() > 1:
+    if torch.cuda.device_count() >= 1:
         print("Using", torch.cuda.device_count(), "GPUs for training!")
         # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
         cbow_net = nn.DataParallel(cbow_net, output_device=1)
@@ -122,10 +125,16 @@ def run_experiment(params):
     print([x.size() for x in cbow_net.parameters()])
     optim_fn, optim_params = get_optimizer(params.optimizer)
     optimizer = optim_fn(cbow_net.parameters(), **optim_params)
+    print(optim_params)
+    def correct_attrib(cb):
+        if isinstance(cb, nn.DataParallel):
+            return cb.module
+        else:
+            return cb
 
-    optimizer = optim.Adam([{'params': cbow_net.module.encoder.lookup_table.parameters(), 'lr': 0.0003},
-                            {'params': cbow_net.module.encoder.key_table.parameters(), 'lr': 0.0003},
-                            {'params': cbow_net.module.encoder.query_table.parameters(), 'lr': 0.0003}])
+    optimizer = optim.Adam([{'params': correct_attrib(cbow_net).encoder.lookup_table.parameters(), 'lr': optim_params["lr"]},
+                            {'params': correct_attrib(cbow_net).encoder.key_table.parameters(), 'lr': optim_params["lr"]},
+                            {'params': correct_attrib(cbow_net).encoder.query_table.parameters(), 'lr': optim_params["lr"]}])
 
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 
@@ -350,7 +359,7 @@ def run_experiment(params):
 
     # load the best model
     if min_val_loss < float('inf'):
-        cbow_net = torch.load(os.path.join(params.outputdir, outputmodelname + '.cbow_net'))
+        cbow_net = torch.load(os.path.join(params.outputdir, outputmodelname + '_val.cbow_net'))
         print("Loading model with best validation loss.")
     else:
         # we use the current model;

@@ -149,6 +149,7 @@ class CBOWDataset(Dataset):
         self.context_size = context_size
         self.num_samples_per_item = num_samples_per_item
         self.mode = mode
+        # When writing into chunkfiles, only keep `num_texts_per_chunk` elements per chunkfile
         self.num_texts_per_chunk = num_texts_per_chunk
 
         texts_generator = _generate_texts(path, num_texts)
@@ -164,7 +165,10 @@ class CBOWDataset(Dataset):
 
         # create chunks
         self.num_texts = num_texts
-        self.num_chunks = math.ceil(num_texts / (1.0*self.num_texts_per_chunk))
+        print("Num Texts", self.num_texts)
+        self.num_chunks = 0
+        self.set_num_chunks_from_num_texts(num_texts)
+        print("Num Chunks", self.num_chunks)
         self._temp_path = temp_path
         if not os.path.exists(self._temp_path):
             os.makedirs(self._temp_path)
@@ -189,6 +193,10 @@ class CBOWDataset(Dataset):
         self.unigram_dist = unigram_dist
 
 
+    def set_num_chunks_from_num_texts(self, num_texts):
+        self.num_chunks = math.ceil(num_texts / (1.0*self.num_texts_per_chunk))
+        self.num_texts = num_texts
+
     def _count_words_per_text(self):
         text_lengths = [0] * len(self.texts)
 
@@ -205,6 +213,7 @@ class CBOWDataset(Dataset):
         is empty.
         """
         for i in range(self.num_chunks):
+            # print(i, self._get_chunk_file_name(i))
             with open(self._get_chunk_file_name(i), "r") as f:
                 lines = f.readlines()
                 if(len(lines) == 0):
@@ -215,10 +224,14 @@ class CBOWDataset(Dataset):
         cur_chunk_file = open(self._get_chunk_file_name(cur_chunk_number), "w")
         cur_idx = 0
         last_chunk_size = self.num_texts - (self.num_texts_per_chunk*(self.num_chunks-1))
+        texts_seen = 0
         for text in texts_generator:
             print(text, file=cur_chunk_file)
-            if cur_idx == self.num_texts_per_chunk - 1 or (cur_idx == last_chunk_size-1 and 
-                    cur_chunk_number == self.num_chunks-1):
+            if cur_idx == self.num_texts_per_chunk - 1 \
+               or (
+                    cur_idx == last_chunk_size-1 and \
+                    cur_chunk_number == self.num_chunks-1
+                ):
                 # start next chunk
                 cur_chunk_file.close()
                 cur_idx = 0  # index within the chunk
@@ -226,7 +239,13 @@ class CBOWDataset(Dataset):
                 cur_chunk_file = open(self._get_chunk_file_name(cur_chunk_number), "w")
             else:
                 cur_idx += 1
+            texts_seen += 1
         cur_chunk_file.close()
+        print("Number texts", texts_seen)
+        # self.num_chunks = cur_chunk_number
+        if texts_seen < self.num_texts:
+            print("Num Documents is different from amount seen, updating...")
+            self.set_num_chunks_from_num_texts(texts_seen)
 
     def _get_chunk_file_name(self, chunk_number):
         return os.path.join(self._temp_path, "chunk" + str(chunk_number))
@@ -236,6 +255,7 @@ class CBOWDataset(Dataset):
 
     def _load_text(self, idx):
         chunk_number = math.floor(idx / (1.0*self.num_texts_per_chunk))
+        # print(idx, chunk_number)
         idx_in_chunk = idx % self.num_texts_per_chunk
         with open(self._get_chunk_file_name(chunk_number), "r") as f:
             for i, line in enumerate(f):
@@ -333,7 +353,10 @@ def _load_texts(path, num_docs):
     return texts
 
 def _generate_texts(path, num_docs):
-    filename_list = recursive_file_list(path)
+    if path.endswith(".txt"):
+        filename_list = [path]
+    else:
+        filename_list = recursive_file_list(path)
 
     for filename in filename_list:
         with open(os.path.realpath(filename), "r") as f:
