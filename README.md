@@ -42,5 +42,7 @@ The best model against the validation set is saved with the suffix `_val.cbow_ne
 You can then turn it into a classical matrix with vocabulary -> vector using the `dump_w2v_k_fmt.py` script:
 
 ```sh
-
+python dump_w2v_k_fmt.py --vocab FILE.vocab --cbow_net MODEL_val.cbow_net --output YOURCHOICEOFFILE
 ```
+
+It's then loadable through Gensim and the likes as a canonical w2vec format.
