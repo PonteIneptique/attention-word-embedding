@@ -2,12 +2,20 @@ import os
 import pickle
 import tqdm
 import torch
+import torch.nn as nn
 
 import argparse
 
+
+def correct_attrib(cb):
+    if isinstance(cb, nn.DataParallel):
+        return cb.module
+    else:
+        return cb
+
 def _save_embeddings_to_word2vec(cbow_net, vocabulary, output_path):
     cbow_net = torch.load(cbow_net)
-    encoder = cbow_net.module.encoder
+    encoder = correct_attrib(cbow_net).encoder
     embeddings = encoder.key_table
     embeddings = embeddings.weight.data.cpu().numpy()
 

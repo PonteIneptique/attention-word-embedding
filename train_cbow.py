@@ -113,7 +113,7 @@ def run_experiment(params):
     # build cbow model
     cbow_net = CBOWNet(encoder, output_embedding_size, n_words, 
                        weights = unigram_dist, n_negs = params.n_negs, padding_idx = 0)
-    if torch.cuda.device_count() >= 1:
+    if torch.cuda.device_count() > 1:
         print("Using", torch.cuda.device_count(), "GPUs for training!")
         # dim = 0 [30, xxx] -> [10, ...], [10, ...], [10, ...] on 3 GPUs
         cbow_net = nn.DataParallel(cbow_net, output_device=1)
@@ -126,15 +126,16 @@ def run_experiment(params):
     optim_fn, optim_params = get_optimizer(params.optimizer)
     optimizer = optim_fn(cbow_net.parameters(), **optim_params)
     print(optim_params)
+
     def correct_attrib(cb):
         if isinstance(cb, nn.DataParallel):
             return cb.module
         else:
             return cb
 
-    optimizer = optim.Adam([{'params': correct_attrib(cbow_net).encoder.lookup_table.parameters(), 'lr': optim_params["lr"]},
-                            {'params': correct_attrib(cbow_net).encoder.key_table.parameters(), 'lr': optim_params["lr"]},
-                            {'params': correct_attrib(cbow_net).encoder.query_table.parameters(), 'lr': optim_params["lr"]}])
+    #optimizer = optim.Adam([{'params': correct_attrib(cbow_net).encoder.lookup_table.parameters(), 'lr': optim_params["lr"]},
+    #                        {'params': correct_attrib(cbow_net).encoder.key_table.parameters(), 'lr': optim_params["lr"]},
+    #                        {'params': correct_attrib(cbow_net).encoder.query_table.parameters(), 'lr': optim_params["lr"]}])
 
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
 
@@ -263,7 +264,7 @@ def run_experiment(params):
                 train_loss = round(np.mean(all_costs), 5)
 
                 # print current loss and processing speed
-                logs.append('Epoch {3} - {4:.4} ; lr {2:.4} ; kq_lr {6:.4}; train-loss {0} ; val-loss {5} ; sentence/s {1}'.format(train_loss, int((processed_training_samples - last_processed_training_samples) / (time.time() - last_time)), optimizer.param_groups[0]['lr'], epoch, percentage_done, val_loss, optimizer.param_groups[1]['lr']))
+                logs.append('Epoch {3} - {4:.4} ; lr {2:.4} ; train-loss {0} ; val-loss {5} ; sentence/s {1}'.format(train_loss, int((processed_training_samples - last_processed_training_samples) / (time.time() - last_time)), optimizer.param_groups[0]['lr'], epoch, percentage_done, val_loss))
                 if params.VERBOSE: 
                     print('\n\n\n')
                 print(logs[-1])
@@ -368,9 +369,7 @@ def run_experiment(params):
     # save word vocabulary and counts
     pickle.dump(word_vec_copy, open( os.path.join(params.outputdir, outputmodelname + '.vocab'), "wb" ))
 
-    if use_multiple_gpus:
-        cbow_net = cbow_net.module
-    return cbow_net.encoder, losses
+    return correct_attrib(cbow_net).encoder, losses
 
 def get_params_parser():
 
